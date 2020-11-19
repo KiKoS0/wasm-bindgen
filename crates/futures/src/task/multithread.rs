@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use js_sys::Int32Array;
 
 const SLEEPING: i32 = 0;
 const AWAKE: i32 = 1;
@@ -162,19 +163,26 @@ fn wait_async(ptr: &AtomicI32, current_value: i32) -> js_sys::Promise {
         crate::task::wait_async_polyfill::wait_async(ptr, current_value)
     } else {
         let mem = wasm_bindgen::memory().unchecked_into::<js_sys::WebAssembly::Memory>();
-        Atomics::wait_async(
-            &mem.buffer(),
-            ptr as *const AtomicI32 as i32 / 4,
-            current_value,
-        )
+        let mem = Int32Array::new(&mem.buffer());
+        let result = Atomics::wait_async(
+            &mem, 
+            (ptr as *const AtomicI32 as i32 / 4),
+            current_value);
+        return result.value();
     };
+    #[wasm_bindgen]
+    extern "C"{
+        pub type WaitAsyncOutput;
+        #[wasm_bindgen(getter, method)]
+        pub fn value(this: &WaitAsyncOutput) -> js_sys::Promise;
+    }
 
     #[wasm_bindgen]
     extern "C" {
         type Atomics;
 
         #[wasm_bindgen(static_method_of = Atomics, js_name = waitAsync)]
-        fn wait_async(buf: &JsValue, index: i32, value: i32) -> js_sys::Promise;
+        fn wait_async(buf: &JsValue, index: i32, value: i32) -> WaitAsyncOutput;
 
         #[wasm_bindgen(static_method_of = Atomics, js_name = waitAsync, getter)]
         fn get_wait_async() -> JsValue;
